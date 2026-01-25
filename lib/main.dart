@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -10,49 +11,74 @@ class WakeUpApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      debugShowCheckedModeBanner: false, // Remove a etiqueta "Debug" do canto
-      theme: ThemeData.dark(), // Tema escuro para não ferir os olhos de manhã
+      debugShowCheckedModeBanner: false,
+      theme: ThemeData.dark(),
       home: const HomeScreen(),
     );
   }
 }
 
-class HomeScreen extends StatelessWidget {
+// MUDANÇA: Agora usamos StatefulWidget porque a hora vai mudar!
+class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  // Esta variável guarda a hora escolhida. Começa nas 07:00
+  DateTime _time = DateTime(2024, 1, 1, 7, 0);
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, // Fundo preto
+      backgroundColor: Colors.black,
       body: Center(
         child: Column(
-          mainAxisAlignment: MainAxisAlignment.center, // Alinha tudo ao centro vertical
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            // Texto da Hora
-            const Text(
-              '07:00',
-              style: TextStyle(
-                fontSize: 80,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
+            Image.asset(
+              'assets/logo.png',
+              height: 200, // Ajusta este valor se ficar muito grande ou pequeno
             ),
             
-            const SizedBox(height: 20), // Um espaço vazio entre o texto e o botão
-            
-            // Botão de Acordar
+            const SizedBox(height: 20),
+
+            // O WIDGET DA RODA MÁGICA
+            SizedBox(
+              height: 200, // Altura da "roda"
+              child: CupertinoTheme(
+                // Forçamos o tema escuro para o texto ser branco
+                data: const CupertinoThemeData(brightness: Brightness.dark), 
+                child: CupertinoDatePicker(
+                  mode: CupertinoDatePickerMode.time, // Apenas horas e minutos
+                  initialDateTime: _time,
+                  use24hFormat: true, // Formato 24h (se quiseres AM/PM mete false)
+                  // Esta função corre sempre que rodas a roda
+                  onDateTimeChanged: (DateTime newTime) {
+                    setState(() {
+                      _time = newTime; // Atualiza a variável com a nova hora
+                    });
+                  },
+                ),
+              ),
+            ),
+
+            const SizedBox(height: 50),
+
             ElevatedButton(
               onPressed: () {
-                print('Botão clicado!'); 
+                // Aqui vamos colocar a lógica de ativar o alarme mais tarde
+                print('Alarme guardado para as ${_time.hour}:${_time.minute}');
               },
               style: ElevatedButton.styleFrom(
                 padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                backgroundColor: Colors.orange, // Cor do botão
+                backgroundColor: Colors.orange,
+                foregroundColor: Colors.black, 
+                side: const BorderSide(color: Colors.black, width: 3),
               ),
-              child: const Text(
-                'DEFINIR ALARME',
-                style: TextStyle(fontSize: 20, color: Colors.white),
-              ),
+              child: const Text('GUARDAR'),
             ),
           ],
         ),
