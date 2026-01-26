@@ -1,8 +1,11 @@
+import 'dart:async';
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
 import 'package:vibration/vibration.dart';
 import 'package:audioplayers/audioplayers.dart';
+import 'package:wakelock_plus/wakelock_plus.dart';
 
 void main() {
   runApp(const WakeUpApp());
@@ -28,120 +31,145 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
-  DateTime _time = DateTime(2024, 1, 1, 7, 0);
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
+  DateTime _time = DateTime(2024, 1, 1, 7, 0); // Variável que guarda a hora escolhida
   bool _isAlarmRinging = false;
-  
-  // O LEITOR DE MÚSICA
   final AudioPlayer _audioPlayer = AudioPlayer();
+  static const platform = MethodChannel('com.rodri.wakeup/pinning');
+  Timer? _uiGuardTimer; 
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _audioPlayer.dispose();
+    _uiGuardTimer?.cancel();
     super.dispose();
   }
 
-  // Função para simular o disparo do alarme
+  // SE TENTAREM SAIR, O SOM CONTINUA!
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (_isAlarmRinging) {
+      if (state == AppLifecycleState.paused || state == AppLifecycleState.inactive) {
+        _audioPlayer.resume(); 
+        WakelockPlus.enable();
+      }
+      if (state == AppLifecycleState.resumed) {
+        _hideSystemBars();
+      }
+    }
+  }
+
+  Future<void> _lockApp() async {
+    try { await platform.invokeMethod('pinApp'); } catch (e) { print(e); }
+  }
+
+  Future<void> _unlockApp() async {
+    try { await platform.invokeMethod('unpinApp'); } catch (e) { print(e); }
+  }
+
+  void _hideSystemBars() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+  }
+
+  void _showSystemBars() {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+  }
+
   void _scheduleAlarm() {
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Alarme definido! Espera 3 segundos...')),
+      const SnackBar(content: Text('Alarme em 3 segundos...')),
     );
 
     Future.delayed(const Duration(seconds: 3), () async {
-      setState(() {
-        _isAlarmRinging = true; // ATIVA O MODO ALARME
+      await WakelockPlus.enable(); 
+      await _lockApp();    
+      _hideSystemBars();
+      
+      _uiGuardTimer = Timer.periodic(const Duration(seconds: 2), (timer) {
+        if (_isAlarmRinging) _hideSystemBars();
       });
 
-      // 1. VIBRAÇÃO
+      setState(() { _isAlarmRinging = true; });
+
       if (await Vibration.hasVibrator() ?? false) {
         Vibration.vibrate(pattern: [500, 1000, 500, 2000], repeat: 0);
       }
 
-      // 2. SOM (Agora aponta diretamente para alarm.mp3 na pasta assets)
+      await _audioPlayer.setAudioContext(AudioContext(
+        android: AudioContextAndroid(
+          isSpeakerphoneOn: true,
+          stayAwake: true,
+          contentType: AndroidContentType.sonification,
+          usageType: AndroidUsageType.alarm, 
+          audioFocus: AndroidAudioFocus.gainTransient, 
+        ),
+        iOS: AudioContextIOS(category: AVAudioSessionCategory.playback),
+      ));
+
       await _audioPlayer.setReleaseMode(ReleaseMode.loop);
-      // O flutter assume que AssetSource começa dentro da pasta 'assets/'
-      await _audioPlayer.play(AssetSource('alarm.mp3')); 
+      await _audioPlayer.play(AssetSource('alarm.mp3'));
     });
   }
 
-  // Função chamada quando o QR Code é lido com sucesso
   void _onQrCodeScanned(String code) async {
     if (code == 'DESLIGAR_WAKEUP_AGORA') {
-      
-      // PARAR VIBRAÇÃO E SOM
+      _uiGuardTimer?.cancel();
+      await _unlockApp();
+      await WakelockPlus.disable();
+      _showSystemBars(); 
       Vibration.cancel();
       await _audioPlayer.stop();
 
-      setState(() {
-        _isAlarmRinging = false;
-      });
-
-      if (mounted) {
-        Navigator.pop(context); // Fecha a câmara
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(backgroundColor: Colors.green, content: Text('Bom dia! Silêncio restaurado.')),
-        );
-      }
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(backgroundColor: Colors.red, content: Text('QR Code errado! Tenta outra vez!')),
-      );
+      setState(() { _isAlarmRinging = false; });
+      if (mounted) Navigator.pop(context); 
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    // --- MODO ALARME (VERMELHO) ---
     if (_isAlarmRinging) {
-      return Scaffold(
-        backgroundColor: Colors.red,
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              const Icon(Icons.volume_up, size: 100, color: Colors.white),
-              const Text(
-                'ACORDA!',
-                style: TextStyle(fontSize: 50, fontWeight: FontWeight.bold, color: Colors.white),
-              ),
-              const Padding(
-                padding: EdgeInsets.all(8.0),
-                child: Text('A tocar alarme...', style: TextStyle(color: Colors.white70)),
-              ),
-              const SizedBox(height: 50),
-              ElevatedButton.icon(
-                icon: const Icon(Icons.qr_code_scanner),
-                label: const Text('PARAR BARULHO'),
-                style: ElevatedButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 20),
-                  backgroundColor: Colors.white,
-                  foregroundColor: Colors.red,
+      return PopScope(
+        canPop: false, 
+        child: Scaffold(
+          backgroundColor: Colors.red,
+          body: SizedBox.expand(
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                const Icon(Icons.lock, size: 80, color: Colors.white),
+                const Text('BLOQUEADO!', style: TextStyle(fontSize: 50, fontWeight: FontWeight.bold, color: Colors.white)),
+                const Text('Não tentes sair.\nLê o QR Code!', textAlign: TextAlign.center, style: TextStyle(color: Colors.white70, fontSize: 20)),
+                const SizedBox(height: 50),
+                ElevatedButton(
+                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => QrScannerScreen(onScan: _onQrCodeScanned))),
+                  style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.red, padding: const EdgeInsets.all(20)),
+                  child: const Text('LER QR CODE', style: TextStyle(fontSize: 20)),
                 ),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => QrScannerScreen(onScan: _onQrCodeScanned),
-                    ),
-                  );
-                },
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       );
     }
 
-    // --- MODO NORMAL ---
     return Scaffold(
       backgroundColor: Colors.black,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            tryLoadLogo(),
-            const SizedBox(height: 20),
+            Image.asset('assets/logo.png', height: 150, errorBuilder: (_,__,___) => const Text('WakeUp', style: TextStyle(color: Colors.orange, fontSize: 40))),
             
+            const SizedBox(height: 20),
+
+            // --- AQUI ESTÁ A RODA DE VOLTA! ---
             SizedBox(
               height: 200,
               child: CupertinoTheme(
@@ -158,65 +186,41 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
             ),
+            // ----------------------------------
 
             const SizedBox(height: 50),
-
             ElevatedButton(
               onPressed: _scheduleAlarm,
-              style: ElevatedButton.styleFrom(
-                padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20),
-                backgroundColor: Colors.orange,
-                foregroundColor: Colors.black,
-                side: const BorderSide(color: Colors.black, width: 3),
-              ),
-              child: const Text('TESTAR SOM (3s)'),
-            ),
+              style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(horizontal: 30, vertical: 15)),
+              child: const Text('TESTAR ALARME IMORTAL'),
+            )
           ],
         ),
       ),
     );
   }
-
-  Widget tryLoadLogo() {
-    return Image.asset(
-      'assets/logo.png',
-      height: 150,
-      errorBuilder: (context, error, stackTrace) {
-        return const Text('Wake Up', style: TextStyle(fontSize: 40, color: Colors.orange));
-      },
-    );
-  }
 }
 
-// --- ECRÃ DO LEITOR DE QR ---
 class QrScannerScreen extends StatefulWidget {
   final Function(String) onScan;
   const QrScannerScreen({super.key, required this.onScan});
-
   @override
   State<QrScannerScreen> createState() => _QrScannerScreenState();
 }
 
 class _QrScannerScreenState extends State<QrScannerScreen> {
   bool _hasScanned = false;
-
   @override
   Widget build(BuildContext context) {
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     return Scaffold(
-      appBar: AppBar(title: const Text('Encontra o QR Code!')),
-      body: MobileScanner(
-        onDetect: (capture) {
-          if (_hasScanned) return; 
-          final List<Barcode> barcodes = capture.barcodes;
-          for (final barcode in barcodes) {
-            if (barcode.rawValue != null) {
-              _hasScanned = true; 
-              widget.onScan(barcode.rawValue!);
-              break;
-            }
-          }
-        },
-      ),
+      body: MobileScanner(onDetect: (capture) {
+        if (_hasScanned) return;
+        if (capture.barcodes.any((b) => b.rawValue != null)) {
+          _hasScanned = true;
+          widget.onScan(capture.barcodes.first.rawValue!);
+        }
+      }),
     );
   }
 }
