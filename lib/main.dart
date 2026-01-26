@@ -24,7 +24,14 @@ class WakeUpApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
-      theme: ThemeData.dark(),
+      theme: ThemeData.dark().copyWith(
+        scaffoldBackgroundColor: const Color((0xFF121212)),
+        primaryColor: Colors.orange,
+        colorScheme: const ColorScheme.dark(
+          primary: Colors.orange,
+          secondary: Colors.deepOrange,
+        ),
+      ),
       home: const HomeScreen(),
     );
   }
@@ -40,7 +47,7 @@ class HomeScreen extends StatefulWidget {
 class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   DateTime _selectedTime = DateTime.now();
   bool _isDaily = false;
-  String _statusMessage = "Escolhe uma hora";
+  String _statusMessage = "Define a tua hora de acordar";
   bool _isAlarmScheduled = false;
 
   bool _isAlarmRinging = false;
@@ -55,9 +62,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   StreamSubscription? _accelSubscription;
   StreamSubscription? _alarmSubscription;
 
-  // --- ALTERAÇÕES DE TEMPO AQUI ---
-  final int _monitorDurationSeconds = 10; // Agora são apenas 10 SEGUNDOS
-  final int _maxInactivitySeconds = 3;    // Se parares 3 segundos, perdes
+  final int _monitorDurationSeconds = 10; 
+  final int _maxInactivitySeconds = 3;    
   int _secondsRemaining = 10;
 
   @override
@@ -66,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addObserver(this);
     _selectedTime = DateTime.now();
 
-    // LÓGICA V3.1.5
     _alarmSubscription = Alarm.ringStream.stream.listen((alarmSettings) {
       Alarm.stop(alarmSettings.id); 
       _triggerAlarm();
@@ -79,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (Alarm.getAlarms().isNotEmpty) {
       setState(() {
         _isAlarmScheduled = true;
-        _statusMessage = "Alarme ativo (Recuperado).";
+        _statusMessage = "Alarme Ativo. Bom descanso.";
       });
     }
   }
@@ -151,11 +156,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       String dayStr = targetTime.day == now.day ? "hoje" : "amanhã";
       String hourStr = targetTime.hour.toString().padLeft(2, '0');
       String minStr = targetTime.minute.toString().padLeft(2, '0');
-      _statusMessage = "Alarme definido para $dayStr às $hourStr:$minStr";
+      _statusMessage = "Alarme para $dayStr às $hourStr:$minStr";
     });
     
     ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Podes fechar a app. O alarme vai tocar!')),
+      const SnackBar(content: Text('Alarme agendado com sucesso!')),
     );
   }
 
@@ -176,19 +181,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     await _lockApp();    
     _hideSystemBars();
     
-    try {
-      await FlutterVolumeController.setVolume(1.0, stream: AudioStream.alarm);
-    } catch (e) {
-      print("Erro volume: $e");
-    }
+    try { await FlutterVolumeController.setVolume(1.0, stream: AudioStream.alarm); } catch (e) {}
     
     _uiGuardTimer?.cancel();
     _uiGuardTimer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (_isAlarmRinging || _isMonitoringActivity) {
         _hideSystemBars();
-        try { 
-          FlutterVolumeController.setVolume(1.0, stream: AudioStream.alarm); 
-        } catch (e) {}
+        try { FlutterVolumeController.setVolume(1.0, stream: AudioStream.alarm); } catch (e) {}
       }
     });
 
@@ -206,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       android: AudioContextAndroid(
         isSpeakerphoneOn: true,
         stayAwake: true,
-        contentType: AndroidContentType.sonification, 
+        contentType: AndroidContentType.sonification,
         usageType: AndroidUsageType.alarm, 
         audioFocus: AndroidAudioFocus.gainTransient, 
       ),
@@ -222,7 +221,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {
       _isAlarmRinging = false;
       _isMonitoringActivity = true;
-      // Define o tempo restante para os 10 segundos
       _secondsRemaining = _monitorDurationSeconds; 
     });
 
@@ -259,7 +257,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     setState(() {
       _isAlarmRinging = false;
       _isMonitoringActivity = false;
-      _statusMessage = "Bom dia! Rotina completa.";
+      _statusMessage = "Rotina Completa. Bom dia!";
     });
 
     if (_isDaily) {
@@ -267,14 +265,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       if (mounted) {
         showDialog(
           context: context, 
-          builder: (_) => const AlertDialog(title: Text("Até amanhã"), content: Text("Alarme reagendado."))
+          builder: (_) => const AlertDialog(title: Text("Ciclo Diário"), content: Text("Alarme reagendado para amanhã."))
         );
       }
     } else {
        if (mounted) {
         showDialog(
           context: context, 
-          builder: (_) => const AlertDialog(title: Text("Parabéns!"), content: Text("És livre."))
+          builder: (_) => const AlertDialog(title: Text("Parabéns!"), content: Text("Sobreviveste."))
         );
       }
     }
@@ -300,93 +298,169 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (_isMonitoringActivity) return PopScope(canPop: false, child: Scaffold(backgroundColor: Colors.deepOrange, body: _buildMonitorScreen()));
 
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Image.asset('assets/logo.png', height: 120, errorBuilder: (_,__,___) => const Text('WakeUp', style: TextStyle(color: Colors.orange, fontSize: 40))),
-            const SizedBox(height: 10),
-            
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: Text(_statusMessage, textAlign: TextAlign.center, style: TextStyle(color: _isAlarmScheduled ? Colors.green : Colors.white70, fontSize: 16)),
-            ),
+      backgroundColor: Colors.grey[950],
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              // --- WIDGET 1: CAIXA PRINCIPAL (LOGO + STATUS) ---
+              Container(
+                margin: const EdgeInsets.symmetric(horizontal: 25),
+                padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
+                decoration: BoxDecoration(
+                  color: Colors.orange.withOpacity(0.05), // Fundo leve
+                  border: Border.all(color: Colors.orange, width: 2), // A Borda Laranja
+                  borderRadius: BorderRadius.circular(25), // Cantos arredondados
+                  boxShadow: [
+                    BoxShadow(color: Colors.orange.withOpacity(0.15), blurRadius: 20, spreadRadius: 1)
+                  ]
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // O LOGO AGORA MORA AQUI DENTRO
+                    Image.asset(
+                      'assets/logo.png', 
+                      height: 150, // Um pouco mais pequeno para caber bem
+                      errorBuilder: (_,__,___) => const Icon(Icons.alarm, size: 80, color: Colors.orange)
+                    ),
+                    
+                    const SizedBox(height: 10),
+                    
+                    // A LINHA DE STATUS
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(_isAlarmScheduled ? Icons.check_circle : Icons.schedule, color: _isAlarmScheduled ? Colors.green : Colors.white70),
+                        const SizedBox(width: 10),
+                        Flexible(
+                          child: Text(
+                            _statusMessage, 
+                            textAlign: TextAlign.center, 
+                            style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold)
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 40),
 
-            IgnorePointer(
-              ignoring: _isAlarmScheduled,
-              child: Opacity(
-                opacity: _isAlarmScheduled ? 0.5 : 1.0,
-                child: SizedBox(
-                  height: 180,
-                  child: CupertinoTheme(
-                    data: const CupertinoThemeData(brightness: Brightness.dark),
-                    child: CupertinoDatePicker(
-                      mode: CupertinoDatePickerMode.time,
-                      initialDateTime: _selectedTime,
-                      use24hFormat: true,
-                      onDateTimeChanged: (t) => _selectedTime = t,
+              // --- WIDGET 2: RODA COM DETALHES LARANJAS ---
+              Stack(
+                alignment: Alignment.center,
+                children: [
+                  IgnorePointer(
+                    ignoring: _isAlarmScheduled,
+                    child: Opacity(
+                      opacity: _isAlarmScheduled ? 0.5 : 1.0,
+                      child: SizedBox(
+                        height: 180,
+                        child: CupertinoTheme(
+                          data: const CupertinoThemeData(
+                            brightness: Brightness.dark,
+                            textTheme: CupertinoTextThemeData(
+                              dateTimePickerTextStyle: TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w500),
+                            ),
+                          ),
+                          child: CupertinoDatePicker(
+                            mode: CupertinoDatePickerMode.time,
+                            initialDateTime: _selectedTime,
+                            use24hFormat: true,
+                            onDateTimeChanged: (t) => _selectedTime = t,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
-                ),
+                  
+                  // --- OS DETALHES LARANJAS (LINHAS DE SELEÇÃO) ---
+                  IgnorePointer(
+                    child: Container(
+                      height: 35,
+                      margin: const EdgeInsets.symmetric(horizontal: 30),
+                      decoration: BoxDecoration(
+                        color: Colors.orange.withOpacity(0.05),
+                        border: Border.all(color: Colors.orange, width: 2.0),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                    ),
+                  )
+                ],
               ),
-            ),
 
-            const SizedBox(height: 20),
+              const SizedBox(height: 30),
 
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Checkbox(
-                  value: _isDaily, 
-                  activeColor: Colors.orange,
-                  onChanged: _isAlarmScheduled ? null : (v) => setState(() => _isDaily = v!)
-                ),
-                const Text("Repetir Diariamente")
-              ],
-            ),
-
-            const SizedBox(height: 30),
-
-            _isAlarmScheduled 
-            ? ElevatedButton(
-                onPressed: _cancelAlarm,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.grey[800], foregroundColor: Colors.white, padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15)),
-                child: const Text('CANCELAR ALARME'),
-              )
-            : ElevatedButton(
-                onPressed: _setAlarm,
-                style: ElevatedButton.styleFrom(backgroundColor: Colors.orange, foregroundColor: Colors.black, padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 15)),
-                child: const Text('DEFINIR ALARME'),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Checkbox(
+                    value: _isDaily, 
+                    activeColor: Colors.orange,
+                    side: const BorderSide(color: Colors.orange), 
+                    checkColor: Colors.black,
+                    onChanged: _isAlarmScheduled ? null : (v) => setState(() => _isDaily = v!)
+                  ),
+                  const Text("Repetir Diariamente", style: TextStyle(color: Colors.white70))
+                ],
               ),
-              
-             const SizedBox(height: 20),
-             if (!_isAlarmScheduled)
-               TextButton(
-                 onPressed: () async {
-                    ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fecha a app AGORA! Toca em 10s.')));
-                    
-                    final now = DateTime.now();
-                    final target = now.add(const Duration(seconds: 10));
-                    
-                    final alarmSettings = AlarmSettings(
-                      id: 42,
-                      dateTime: target,
-                      assetAudioPath: 'assets/alarm.mp3',
-                      loopAudio: true,
-                      vibrate: true,
-                      fadeDuration: 3.0,
-                      notificationTitle: 'TESTE',
-                      notificationBody: 'Abre a app!',
-                      enableNotificationOnKill: true,
-                    );
-                    await Alarm.set(alarmSettings: alarmSettings);
-                 },
-                 child: const Text("Testar (Fecha a App e Espera 10s)", style: TextStyle(color: Colors.white24)),
-               )
-          ],
+
+              const SizedBox(height: 30),
+
+              _isAlarmScheduled 
+              ? ElevatedButton(
+                  onPressed: _cancelAlarm,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color((0xFF121212)), 
+                    foregroundColor: Colors.white, 
+                    side: const BorderSide(color: Colors.white24),
+                    padding: const EdgeInsets.symmetric(horizontal: 50, vertical: 18),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30))
+                  ),
+                  child: const Text('CANCELAR ALARME', style: TextStyle(fontSize: 16)),
+                )
+              : ElevatedButton(
+                  onPressed: _setAlarm,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange, 
+                    foregroundColor: Colors.black, 
+                    padding: const EdgeInsets.symmetric(horizontal: 60, vertical: 18),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                    elevation: 10,
+                    shadowColor: Colors.orange.withOpacity(0.5)
+                  ),
+                  child: const Text('DEFINIR ALARME', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                ),
+                
+               const SizedBox(height: 30),
+               
+               if (!_isAlarmScheduled)
+                 TextButton.icon(
+                   onPressed: () async {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Fecha a app AGORA! Toca em 10s.')));
+                      final now = DateTime.now();
+                      final target = now.add(const Duration(seconds: 10));
+                      final alarmSettings = AlarmSettings(
+                        id: 42,
+                        dateTime: target,
+                        assetAudioPath: 'assets/alarm.mp3',
+                        loopAudio: true,
+                        vibrate: true,
+                        fadeDuration: 3.0,
+                        notificationTitle: 'TESTE',
+                        notificationBody: 'Abre a app!',
+                        enableNotificationOnKill: true,
+                      );
+                      await Alarm.set(alarmSettings: alarmSettings);
+                   },
+                   icon: const Icon(Icons.science, color: Colors.white24, size: 16),
+                   label: const Text("Teste Rápido (10s)", style: TextStyle(color: Colors.white24)),
+                 )
+            ],
+          ),
         ),
       ),
     );
@@ -397,14 +471,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.warning_amber, size: 80, color: Colors.white),
-          const Text('ACORDA!', style: TextStyle(fontSize: 50, fontWeight: FontWeight.bold, color: Colors.white)),
-          Text(_isMonitoringActivity ? 'PARASTE DE MEXER!' : 'Lê o QR Code!', style: const TextStyle(color: Colors.white, fontSize: 20)),
-          const SizedBox(height: 50),
-          ElevatedButton(
+          const Icon(Icons.warning_amber, size: 100, color: Colors.white),
+          const SizedBox(height: 20),
+          const Text('ACORDA!', style: TextStyle(fontSize: 60, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 5)),
+          const Text('A única saída é o QR Code', style: TextStyle(color: Colors.white70, fontSize: 18)),
+          const SizedBox(height: 60),
+          ElevatedButton.icon(
             onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (c) => QrScannerScreen(onScan: _onQrCodeScanned))),
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.red, padding: const EdgeInsets.all(20)),
-            child: const Text('LER QR CODE', style: TextStyle(fontSize: 20)),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.white, foregroundColor: Colors.red, padding: const EdgeInsets.symmetric(horizontal: 40, vertical: 20)),
+            icon: const Icon(Icons.qr_code_scanner),
+            label: const Text('LER QR CODE', style: TextStyle(fontSize: 20)),
           ),
         ],
       ),
@@ -416,22 +492,21 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       child: Column(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Icon(Icons.directions_run, size: 80, color: Colors.white),
-          const Text('Mexe-te!', style: TextStyle(fontSize: 40, fontWeight: FontWeight.bold, color: Colors.white)),
+          const Icon(Icons.directions_run, size: 100, color: Colors.white),
           const SizedBox(height: 20),
-          const Text('Não pares por 3s!', style: TextStyle(color: Colors.white70, fontSize: 18)),
-          const SizedBox(height: 40),
-          // MOSTRAR APENAS SEGUNDOS AGORA
-          Text('${_secondsRemaining}',
-            style: const TextStyle(fontSize: 80, fontWeight: FontWeight.bold, color: Colors.white)),
+          const Text('MEXE-TE!', style: TextStyle(fontSize: 50, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 10),
+          const Text('Não pares por 3 segundos!', style: TextStyle(color: Colors.white70, fontSize: 18)),
+          const SizedBox(height: 50),
+          Text('${_secondsRemaining}',
+            style: const TextStyle(fontSize: 100, fontWeight: FontWeight.bold, color: Colors.white)),
           const Text('segundos restantes', style: TextStyle(color: Colors.white70)),
-          const SizedBox(height: 20),
+          const SizedBox(height: 40),
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 40),
+            padding: const EdgeInsets.symmetric(horizontal: 50),
             child: LinearProgressIndicator(
-              value: 1 - (_secondsRemaining / _monitorDurationSeconds), // Cálculo corrigido
-              color: Colors.white, backgroundColor: Colors.orangeAccent,
+              value: 1 - (_secondsRemaining / _monitorDurationSeconds),
+              color: Colors.white, backgroundColor: Colors.deepOrangeAccent, minHeight: 10, borderRadius: BorderRadius.circular(5),
             ),
           )
         ],
