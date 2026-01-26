@@ -10,6 +10,7 @@ import 'package:wakelock_plus/wakelock_plus.dart';
 import 'package:sensors_plus/sensors_plus.dart';
 import 'package:alarm/alarm.dart';
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -49,6 +50,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   bool _isDaily = false;
   String _statusMessage = "Define a tua hora de acordar";
   bool _isAlarmScheduled = false;
+  final FlutterLocalNotificationsPlugin _notificationsPlugin = FlutterLocalNotificationsPlugin();
 
   bool _isAlarmRinging = false;
   bool _isMonitoringActivity = false;
@@ -66,6 +68,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final int _maxInactivitySeconds = 3;    
   int _secondsRemaining = 10;
 
+  Future<void> _cancelStickyNotification() async {
+    try {
+      await _notificationsPlugin.cancel(888);
+    } catch (e) {
+      print("Erro ao cancelar notificação: $e");
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -77,15 +87,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _triggerAlarm();
     });
 
+    const AndroidInitializationSettings initializationSettingsAndroid =
+        AndroidInitializationSettings('@mipmap/ic_launcher'); // Usa o ícone da app
+    const InitializationSettings initializationSettings =
+        InitializationSettings(android: initializationSettingsAndroid);
+    _notificationsPlugin.initialize(initializationSettings);
     _checkScheduledAlarms();
   }
 
   Future<void> _checkScheduledAlarms() async {
-    if (Alarm.getAlarms().isNotEmpty) {
+    final alarms = Alarm.getAlarms(); // Buscar lista de alarmes
+    if (alarms.isNotEmpty) {
       setState(() {
         _isAlarmScheduled = true;
         _statusMessage = "Alarme Ativo. Bom descanso.";
       });
+      _showStickyNotification(alarms.first.dateTime);
     }
   }
 
@@ -98,6 +115,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _stopEverything() {
+    _cancelStickyNotification();
     _audioPlayer.stop();
     _uiGuardTimer?.cancel();
     _inactivityTimer?.cancel();
@@ -158,7 +176,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       String minStr = targetTime.minute.toString().padLeft(2, '0');
       _statusMessage = "Alarme para $dayStr às $hourStr:$minStr";
     });
-    
+
+    _showStickyNotification(targetTime);
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(content: Text('Alarme agendado com sucesso!')),
     );
@@ -170,9 +190,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       _isAlarmScheduled = false;
       _statusMessage = "Alarme cancelado.";
     });
+
+    _cancelStickyNotification();
   }
 
   void _triggerAlarm() async {
+    _cancelStickyNotification(); 
     _inactivityTimer?.cancel();
     _successTimer?.cancel();
     _accelSubscription?.cancel();
@@ -292,6 +315,39 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+
+Future<void> _showStickyNotification(DateTime targetTime) async {
+    // Calcular texto da hora e dia
+    final now = DateTime.now();
+    String dayStr = targetTime.day == now.day ? "hoje" : "amanhã";
+    String hourStr = targetTime.hour.toString().padLeft(2, '0');
+    String minStr = targetTime.minute.toString().padLeft(2, '0');
+    
+    String message = "Toca $dayStr às $hourStr:$minStr";
+
+    const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'sticky_channel_id', 
+      'Estado do Alarme',
+      channelDescription: 'Mostra que o alarme está ativo',
+      importance: Importance.low,
+      priority: Priority.low,
+      ongoing: true,      
+      autoCancel: false, 
+      showWhen: false,
+    );
+    const NotificationDetails details = NotificationDetails(android: androidDetails);
+    
+    try {
+      await _notificationsPlugin.show(
+        888, 
+        'Alarme Agendado', // Título
+        message,           // Mensagem com a hora (ex: Toca hoje às 09:00)
+        details
+      );
+    } catch (e) {
+      print("Erro notificação: $e");
+    }
+  }
   @override
   Widget build(BuildContext context) {
     if (_isAlarmRinging) return PopScope(canPop: false, child: Scaffold(backgroundColor: Colors.red, body: _buildAlarmScreen()));
