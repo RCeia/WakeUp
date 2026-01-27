@@ -11,6 +11,8 @@ import 'package:sensors_plus/sensors_plus.dart';
 import 'package:alarm/alarm.dart';
 import 'package:flutter_volume_controller/flutter_volume_controller.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -26,13 +28,24 @@ class WakeUpApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       theme: ThemeData.dark().copyWith(
-        scaffoldBackgroundColor: const Color((0xFF121212)),
+        scaffoldBackgroundColor: const Color(0xFF121212),
         primaryColor: Colors.orange,
         colorScheme: const ColorScheme.dark(
           primary: Colors.orange,
           secondary: Colors.deepOrange,
         ),
       ),
+      // --- IDIOMA E RODA ---
+      locale: const Locale('en', 'US'), 
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('en', 'US'),
+        Locale('pt', 'PT'),
+      ],
       home: const HomeScreen(),
     );
   }
@@ -64,9 +77,22 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   StreamSubscription? _accelSubscription;
   StreamSubscription? _alarmSubscription;
 
-  final int _monitorDurationSeconds = 10; 
-  final int _maxInactivitySeconds = 3;    
-  int _secondsRemaining = 10;
+  final int _monitorDurationSeconds = 600; 
+  final int _maxInactivitySeconds = 45;    
+  int _secondsRemaining = 600;
+
+  // --- MEMÓRIA ---
+  Future<void> _loadDailyPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _isDaily = prefs.getBool('is_daily_check') ?? false;
+    });
+  }
+
+  Future<void> _saveDailyPreference(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('is_daily_check', value);
+  }
 
   Future<void> _cancelStickyNotification() async {
     try {
@@ -80,7 +106,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    _selectedTime = DateTime.now();
+    
+    final now = DateTime.now();
+    _selectedTime = DateTime(now.year, now.month, now.day, now.hour, now.minute);
+
+    _loadDailyPreference(); 
 
     _alarmSubscription = Alarm.ringStream.stream.listen((alarmSettings) {
       Alarm.stop(alarmSettings.id); 
@@ -88,7 +118,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
 
     const AndroidInitializationSettings initializationSettingsAndroid =
-        AndroidInitializationSettings('@mipmap/ic_launcher'); // Usa o ícone da app
+        AndroidInitializationSettings('@mipmap/launcher_icon');
     const InitializationSettings initializationSettings =
         InitializationSettings(android: initializationSettingsAndroid);
     _notificationsPlugin.initialize(initializationSettings);
@@ -96,7 +126,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Future<void> _checkScheduledAlarms() async {
-    final alarms = Alarm.getAlarms(); // Buscar lista de alarmes
+    final alarms = Alarm.getAlarms();
     if (alarms.isNotEmpty) {
       setState(() {
         _isAlarmScheduled = true;
@@ -110,12 +140,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _alarmSubscription?.cancel();
+    _cancelStickyNotification();
     _stopEverything();
     super.dispose();
   }
 
   void _stopEverything() {
-    _cancelStickyNotification();
     _audioPlayer.stop();
     _uiGuardTimer?.cancel();
     _inactivityTimer?.cancel();
@@ -186,16 +216,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Future<void> _cancelAlarm() async {
     await Alarm.stop(42);
+    _cancelStickyNotification();
     setState(() {
       _isAlarmScheduled = false;
       _statusMessage = "Alarme cancelado.";
     });
-
-    _cancelStickyNotification();
   }
 
   void _triggerAlarm() async {
     _cancelStickyNotification(); 
+
     _inactivityTimer?.cancel();
     _successTimer?.cancel();
     _accelSubscription?.cancel();
@@ -275,16 +305,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _finishMorningRoutine() async {
-    _stopEverything();
+    _stopEverything(); 
     
-    setState(() {
-      _isAlarmRinging = false;
-      _isMonitoringActivity = false;
-      _statusMessage = "Rotina Completa. Bom dia!";
-    });
-
     if (_isDaily) {
-      _setAlarm();
+      await _setAlarm(); 
+      setState(() {
+        _isAlarmRinging = false;
+        _isMonitoringActivity = false;
+      });
       if (mounted) {
         showDialog(
           context: context, 
@@ -292,12 +320,18 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         );
       }
     } else {
-       if (mounted) {
-        showDialog(
-          context: context, 
-          builder: (_) => const AlertDialog(title: Text("Parabéns!"), content: Text("Sobreviveste."))
-        );
-      }
+      _cancelStickyNotification();
+      setState(() {
+        _isAlarmRinging = false;
+        _isMonitoringActivity = false;
+        _statusMessage = "Rotina Completa. Bom dia!";
+      });
+      if (mounted) {
+       showDialog(
+         context: context, 
+         builder: (_) => const AlertDialog(title: Text("Parabéns!"), content: Text("Sobreviveste."))
+       );
+     }
     }
   }
 
@@ -315,14 +349,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
-
-Future<void> _showStickyNotification(DateTime targetTime) async {
-    // Calcular texto da hora e dia
+  Future<void> _showStickyNotification(DateTime targetTime) async {
     final now = DateTime.now();
     String dayStr = targetTime.day == now.day ? "hoje" : "amanhã";
     String hourStr = targetTime.hour.toString().padLeft(2, '0');
     String minStr = targetTime.minute.toString().padLeft(2, '0');
-    
     String message = "Toca $dayStr às $hourStr:$minStr";
 
     const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
@@ -336,38 +367,36 @@ Future<void> _showStickyNotification(DateTime targetTime) async {
       showWhen: false,
     );
     const NotificationDetails details = NotificationDetails(android: androidDetails);
-    
     try {
-      await _notificationsPlugin.show(
-        888, 
-        'Alarme Agendado', // Título
-        message,           // Mensagem com a hora (ex: Toca hoje às 09:00)
-        details
-      );
+      await _notificationsPlugin.show(888, 'Alarme Agendado', message, details);
     } catch (e) {
       print("Erro notificação: $e");
     }
   }
+
   @override
   Widget build(BuildContext context) {
     if (_isAlarmRinging) return PopScope(canPop: false, child: Scaffold(backgroundColor: Colors.red, body: _buildAlarmScreen()));
     if (_isMonitoringActivity) return PopScope(canPop: false, child: Scaffold(backgroundColor: Colors.deepOrange, body: _buildMonitorScreen()));
 
     return Scaffold(
-      backgroundColor: Colors.grey[950],
+      backgroundColor: const Color(0xFF121212), 
       body: SafeArea(
-        child: Center(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 20),
+          // CORREÇÃO DO SCROLL: Usamos Column com Spacer para fixar tudo
           child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
-              // --- WIDGET 1: CAIXA PRINCIPAL (LOGO + STATUS) ---
+              // LOGO E STATUS
+              const Spacer(),
               Container(
                 margin: const EdgeInsets.symmetric(horizontal: 25),
                 padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 20),
                 decoration: BoxDecoration(
-                  color: Colors.orange.withOpacity(0.05), // Fundo leve
-                  border: Border.all(color: Colors.orange, width: 2), // A Borda Laranja
-                  borderRadius: BorderRadius.circular(25), // Cantos arredondados
+                  color: Colors.orange.withOpacity(0.05),
+                  border: Border.all(color: Colors.orange, width: 2),
+                  borderRadius: BorderRadius.circular(25),
                   boxShadow: [
                     BoxShadow(color: Colors.orange.withOpacity(0.15), blurRadius: 20, spreadRadius: 1)
                   ]
@@ -375,16 +404,12 @@ Future<void> _showStickyNotification(DateTime targetTime) async {
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // O LOGO AGORA MORA AQUI DENTRO
                     Image.asset(
                       'assets/logo.png', 
-                      height: 150, // Um pouco mais pequeno para caber bem
+                      height: 120, // Reduzi um pouco para garantir espaço
                       errorBuilder: (_,__,___) => const Icon(Icons.alarm, size: 80, color: Colors.orange)
                     ),
-                    
                     const SizedBox(height: 10),
-                    
-                    // A LINHA DE STATUS
                     Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
@@ -403,9 +428,9 @@ Future<void> _showStickyNotification(DateTime targetTime) async {
                 ),
               ),
 
-              const SizedBox(height: 40),
+              const Spacer(),
 
-              // --- WIDGET 2: RODA COM DETALHES LARANJAS ---
+              // RODA DE TEMPO
               Stack(
                 alignment: Alignment.center,
                 children: [
@@ -414,7 +439,7 @@ Future<void> _showStickyNotification(DateTime targetTime) async {
                     child: Opacity(
                       opacity: _isAlarmScheduled ? 0.5 : 1.0,
                       child: SizedBox(
-                        height: 180,
+                        height: 178, 
                         child: CupertinoTheme(
                           data: const CupertinoThemeData(
                             brightness: Brightness.dark,
@@ -423,6 +448,7 @@ Future<void> _showStickyNotification(DateTime targetTime) async {
                             ),
                           ),
                           child: CupertinoDatePicker(
+                            key: UniqueKey(),
                             mode: CupertinoDatePickerMode.time,
                             initialDateTime: _selectedTime,
                             use24hFormat: true,
@@ -432,8 +458,6 @@ Future<void> _showStickyNotification(DateTime targetTime) async {
                       ),
                     ),
                   ),
-                  
-                  // --- OS DETALHES LARANJAS (LINHAS DE SELEÇÃO) ---
                   IgnorePointer(
                     child: Container(
                       height: 35,
@@ -448,8 +472,9 @@ Future<void> _showStickyNotification(DateTime targetTime) async {
                 ],
               ),
 
-              const SizedBox(height: 30),
+              const Spacer(),
 
+              // CHECKBOX DIÁRIO
               Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -458,14 +483,19 @@ Future<void> _showStickyNotification(DateTime targetTime) async {
                     activeColor: Colors.orange,
                     side: const BorderSide(color: Colors.orange), 
                     checkColor: Colors.black,
-                    onChanged: _isAlarmScheduled ? null : (v) => setState(() => _isDaily = v!)
+                    onChanged: _isAlarmScheduled ? null : (v) {
+                      if (v == null) return;
+                      setState(() => _isDaily = v);
+                      _saveDailyPreference(v); 
+                    }
                   ),
                   const Text("Repetir Diariamente", style: TextStyle(color: Colors.white70))
                 ],
               ),
 
-              const SizedBox(height: 30),
+              const Spacer(),
 
+              // BOTÕES
               _isAlarmScheduled 
               ? ElevatedButton(
                   onPressed: _cancelAlarm,
@@ -491,8 +521,9 @@ Future<void> _showStickyNotification(DateTime targetTime) async {
                   child: const Text('DEFINIR ALARME', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                 ),
                 
-               const SizedBox(height: 30),
+               const Spacer(),
                
+               // TESTE RÁPIDO
                if (!_isAlarmScheduled)
                  TextButton.icon(
                    onPressed: () async {
@@ -514,7 +545,9 @@ Future<void> _showStickyNotification(DateTime targetTime) async {
                    },
                    icon: const Icon(Icons.science, color: Colors.white24, size: 16),
                    label: const Text("Teste Rápido (10s)", style: TextStyle(color: Colors.white24)),
-                 )
+                 ),
+                 
+               const Spacer(),
             ],
           ),
         ),
@@ -552,7 +585,7 @@ Future<void> _showStickyNotification(DateTime targetTime) async {
           const SizedBox(height: 20),
           const Text('MEXE-TE!', style: TextStyle(fontSize: 50, fontWeight: FontWeight.bold, color: Colors.white)),
           const SizedBox(height: 10),
-          const Text('Não pares por 3 segundos!', style: TextStyle(color: Colors.white70, fontSize: 18)),
+          const Text('Não pares por 45 segundos!', style: TextStyle(color: Colors.white70, fontSize: 18)),
           const SizedBox(height: 50),
           Text('${_secondsRemaining}',
             style: const TextStyle(fontSize: 100, fontWeight: FontWeight.bold, color: Colors.white)),
