@@ -85,9 +85,3 @@ To run this project locally, you will need a physical Android device (emulators 
     flutter run --release
 
 *Note: For the alarm to function correctly on OEM versions of Android (Samsung, Xiaomi, etc.), ensure battery optimization is disabled for the app settings.*
-
----
-
-## 📄 License
-
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
