@@ -75,7 +75,7 @@ To run this project locally, you will need a physical Android device (emulators 
 ### Installation
 
 1. Clone the repository:
-    git clone https://github.com/your-username/wakeup.git
+    git clone https://github.com/RCeia/wakeup.git
     cd wakeup
 
 2. Install dependencies:
