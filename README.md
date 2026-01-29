@@ -45,8 +45,57 @@ _accelSubscription = accelerometerEvents.listen((AccelerometerEvent event) {
     _resetInactivityTimer();
   }
 });
-2. Android Lifecycle & OptimizationTo prevent the Android OS from killing the alarm process to save battery, the app implements:Wake Locks: Keeps the CPU running and screen on during the alarm sequence.Foreground Service: Runs the alarm with a visible notification, signaling importance to the OS.Native Permissions: Optimized AndroidManifest.xml to handle SYSTEM_ALERT_WINDOW (drawing over other apps) and SCHEDULE_EXACT_ALARM.📸 ScreenshotsHome (Idle)Alarm ScheduledAlarm RingingMotion Challenge<img src="assets/screenshots/home.png" width="200"><img src="assets/screenshots/scheduled.png" width="200"><img src="assets/screenshots/ringing.png" width="200"><img src="assets/screenshots/motion.png" width="200">(Note: Screenshots are stored in the assets/screenshots directory)🚀 Getting StartedTo run this project locally, you will need a physical Android device (emulators often do not support accelerometer data correctly).PrerequisitesFlutter SDK (3.22.0 or higher)Dart SDK (3.0.0 or higher)Android Studio / VS CodeInstallationClone the repository:Bashgit clone [https://github.com/your-username/wakeup.git](https://github.com/your-username/wakeup.git)
-cd wakeup
-Install dependencies:Bashflutter pub get
-Run the app:Bashflutter run --release
-Note: For the alarm to function correctly on OEM versions of Android (Samsung, Xiaomi, etc.), ensure battery optimization is disabled for the app settings.📄 LicenseThis project is licensed under the MIT License - see the LICENSE file for details.
+
+``markdown
+#### 2. Android Lifecycle & Optimization
+To prevent the Android OS from killing the alarm process to save battery, the app implements:
+* **Wake Locks:** Acquires a `PARTIAL_WAKE_LOCK` to keep the CPU running and screen active.
+* **Foreground Service:** Runs the alarm with a visible notification, signaling high priority to the Android scheduler.
+* **Native Permissions:** Optimized `AndroidManifest.xml` to handle `SYSTEM_ALERT_WINDOW` (drawing over other apps) and `SCHEDULE_EXACT_ALARM`.
+
+---
+
+```markdown
+---
+## 📸 Screenshots
+
+| Home (Idle) | Alarm Scheduled | Alarm Ringing | Motion Challenge |
+|:---:|:---:|:---:|:---:|
+| <img src="assets/screenshots/home.png" width="200"> | <img src="assets/screenshots/scheduled.png" width="200"> | <img src="assets/screenshots/ringing.png" width="200"> | <img src="assets/screenshots/motion.png" width="200"> |
+
+*(Note: Screenshots are stored in the `assets/screenshots` directory)*
+
+## 🚀 Getting Started
+
+To run this project locally, you will need a physical Android device (emulators often do not support accelerometer data correctly).
+
+### Prerequisites
+* Flutter SDK (3.22.0 or higher)
+* Dart SDK (3.0.0 or higher)
+* Android Studio / VS Code
+
+### Installation
+
+1.  **Clone the repository:**
+    ```bash
+    git clone https://github.com/your-username/wakeup.git
+    cd wakeup
+    ```
+
+2.  **Install dependencies:**
+    ```bash
+    flutter pub get
+    ```
+
+3.  **Run the app:**
+    ```bash
+    flutter run --release
+    ```
+
+*Note: For the alarm to function correctly on OEM versions of Android (Samsung, Xiaomi, etc.), ensure battery optimization is disabled in the app settings.*
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
