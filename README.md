@@ -57,7 +57,7 @@ To prevent the Android OS from killing the alarm process to save battery, the ap
 
 | Home (Idle) | Alarm Scheduled | Alarm Ringing | Motion Challenge |
 |:---:|:---:|:---:|:---:|
-| <img src="assets/screenshots/home.png" width="200"> | <img src="assets/screenshots/scheduled.png" width="200"> | <img src="assets/screenshots/ringing.png" width="200"> | <img src="assets/screenshots/motion.png" width="200"> |
+| <img src="assets/screenshots/home.jpeg" width="200"> | <img src="assets/screenshots/scheduled.jpeg" width="200"> | <img src="assets/screenshots/ringing.jpeg" width="200"> | <img src="assets/screenshots/motion.jpeg" width="200"> |
 
 *(Note: Screenshots are stored in the `assets/screenshots` directory)*
 
